@@ -23,5 +23,6 @@ cmake --build build
 Execution 
 ------------
 ```bash
-./build/tp
+cd build/
+./tp
 ```
