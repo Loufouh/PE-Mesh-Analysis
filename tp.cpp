@@ -66,6 +66,7 @@ struct Triangle {
     unsigned int v[3];
 };
 
+int weight_type = 0;
 
 struct Mesh {
     std::vector<Vec3> vertices; //array of mesh vertices positions
@@ -75,34 +76,140 @@ struct Mesh {
 
     //Compute face normals for the display
     void computeTrianglesNormals() {
-
         //A faire : implémenter le calcul des normales par face
         //Attention commencer la fonction par triangle_normals.clear();
+        triangle_normals.clear();
+        triangle_normals.reserve(triangles.size());
         //Iterer sur les triangles
+        for (Triangle triangle: triangles) {
+            Vec3 vertex0 = vertices[triangle[0]];
+            Vec3 vertex1 = vertices[triangle[1]];
+            Vec3 vertex2 = vertices[triangle[2]];
 
-        //La normal du triangle i est le resultat du produit vectoriel de deux ses arêtes e_10 et e_20 normalisé (e_10^e_20)
-        //L'arete e_10 est représentée par le vecteur partant du sommet 0 (triangles[i][0]) au sommet 1 (triangles[i][1])
-        //L'arete e_20 est représentée par le vecteur partant du sommet 0 (triangles[i][0]) au sommet 2 (triangles[i][2])
+            //L'arete e_10 est représentée par le vecteur partant du sommet 0 (triangles[i][0]) au sommet 1 (triangles[i][1])
+            Vec3 vector1 = vertex1 - vertex0;
+            //L'arete e_20 est représentée par le vecteur partant du sommet 0 (triangles[i][0]) au sommet 2 (triangles[i][2])
+            Vec3 vector2 = vertex2 - vertex0;
 
-        //Normaliser et ajouter dans triangle_normales
+            //La normal du triangle i est le resultat du produit vectoriel de deux ses arêtes e_10 et e_20 normalisé (e_10^e_20)
+            Vec3 normal = Vec3::cross(vector1, vector2);
+
+            //Normaliser et ajouter dans triangle_normales
+            normal.normalize();
+            triangle_normals.push_back(normal);
+        }
+
+    }
+
+    void resetNormals() {
+        normals.clear();
+        normals.resize(vertices.size());
+
+        for (Vec3 &normal: normals) {
+            normal = Vec3(0, 0, 0);
+        }
+    }
+
+    void normalizeNormals() {
+        for (Vec3 &normal: normals) {
+            normal.normalize();
+        }
+    }
+
+    void computeUniformVerticesNormals() {
+        resetNormals();
+
+        for (unsigned int i = 0; i < triangles.size(); i++) {
+            for (int j = 0; j < 3; j++) {
+                normals[triangles[i][j]] += triangle_normals[i];
+            }
+        }
+
+        normalizeNormals();
+    }
+
+    void computeAreaVerticesNormals() {
+        resetNormals();
+
+        for (unsigned int i = 0; i < triangles.size(); i++) {
+            Vec3 vertex0 = vertices[triangles[i][0]];
+            Vec3 vertex1 = vertices[triangles[i][1]];
+            Vec3 vertex2 = vertices[triangles[i][2]];
+
+            //L'arete e_10 est représentée par le vecteur partant du sommet 0 (triangles[i][0]) au sommet 1 (triangles[i][1])
+            Vec3 vector1 = vertex1 - vertex0;
+            //L'arete e_20 est représentée par le vecteur partant du sommet 0 (triangles[i][0]) au sommet 2 (triangles[i][2])
+            Vec3 vector2 = vertex2 - vertex0;
+
+            //Calcul de l'air du triangle
+            //(En fait, ici on calcule celle du parallélogramme, mais comme ça sera normé, ça n'a pas d'importance)
+            float area = vector1.length() * vector2.length();
+
+            //Pondération de la normal du triangle
+            Vec3 weightedNormal = triangle_normals[i];
+            weightedNormal *= area;
+
+            //Ajout de la normal du triangle pour chaque sommet
+            for (int j = 0; j < 3; j++) {
+                normals[triangles[i][j]] += weightedNormal;
+            }
+        }
+
+        normalizeNormals();
+    }
+
+    void computeAngleVerticesNormals() {
+        resetNormals();
+
+        for (unsigned int i = 0; i < triangles.size(); i++) {
+            //Pour chaque sommet du triangle
+            for (int j = 0; j < 3; j++) {
+                Vec3 vertex0 = vertices[triangles[i][j % 3]];
+                Vec3 vertex1 = vertices[triangles[i][(j + 1) % 3]];
+                Vec3 vertex2 = vertices[triangles[i][(j + 2) % 3]];
+
+                //L'arete e_10 est représentée par le vecteur partant du sommet 0 (triangles[i][0]) au sommet 1 (triangles[i][1])
+                Vec3 vector1 = vertex1 - vertex0;
+                //L'arete e_20 est représentée par le vecteur partant du sommet 0 (triangles[i][0]) au sommet 2 (triangles[i][2])
+                Vec3 vector2 = vertex2 - vertex0;
+
+                //Calcul de l'angle depuis le produit scalaire : a.b = cos(angle)/( ||a|| * ||b|| )
+                // => angle = acos(a.b / ( ||a|| * ||b|| ))
+                float dotProduct = Vec3::dot(vector1, vector2);
+                float lengthMultiplication = vector1.length() * vector2.length();
+
+                float angle = acos( dotProduct / lengthMultiplication );
+
+                //Pondération de la normale du triangle
+                Vec3 weightedNormal = triangle_normals[i];
+                weightedNormal *= angle;
+
+                //Ajout de la normale du triangle pour le sommet
+                normals[triangles[i][j]] += weightedNormal;
+            }
+        }
+
+        normalizeNormals();
     }
 
     //Compute vertices normals as the average of its incident faces normals
     void computeVerticesNormals() {
         //Utiliser weight_type : 0 uniforme, 1 aire des triangles, 2 angle du triangle
 
-        //A faire : implémenter le calcul des normales par sommet comme la moyenne des normales des triangles incidents
-        //Attention commencer la fonction par normals.clear();
-        //Initializer le vecteur normals taille vertices.size() avec Vec3(0., 0., 0.)
-        //Iterer sur les triangles
+        switch (weight_type) {
+            case 0:
+                computeUniformVerticesNormals();
+                break;
+            case 1:
+                computeAreaVerticesNormals();
+                break;
+            case 2:
+                computeAngleVerticesNormals();
+                break;
 
-        //Pour chaque triangle i
-        //Ajouter la normal au triangle à celle de chacun des sommets en utilisant des poids
-        //0 uniforme, 1 aire du triangle, 2 angle du triangle
-
-        //Iterer sur les normales et les normaliser
-
-
+            default:
+                break;
+        }
     }
 
     void computeNormals() {
@@ -217,7 +324,6 @@ bool display_smooth_normals;
 bool display_mesh;
 bool display_basis;
 DisplayMode displayMode;
-int weight_type;
 
 // -------------------------------------------
 // OpenGL/GLUT application code.
@@ -727,7 +833,7 @@ void normalize_valences(const std::vector<unsigned int> &valences,
     normalized.reserve(valences.size());
 
     for (auto valence: valences) {
-        normalized.push_back((float) valence / (float)max);
+        normalized.push_back((float) valence / (float) max);
     }
 }
 
