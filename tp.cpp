@@ -755,6 +755,9 @@ void key(unsigned char keyPressed, int x, int y) {
             if (weight_type == 3) weight_type = 0;
             mesh.computeVerticesNormals(); //recalcul des normales avec le type de poids choisi
             break;
+		case 'q':
+			exit(0);
+			break;
 
         default:
             break;
